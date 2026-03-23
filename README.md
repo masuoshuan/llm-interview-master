@@ -69,3 +69,46 @@ cp .env.local.example .env.local
 
 - Base URL: `https://coding.dashscope.aliyuncs.com/v1`
 - 协议：兼容 Anthropic 格式
+
+## 🚀 部署到 Vercel
+
+### 方式 1：一键部署（推荐）
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/masuoshuan/llm-interview-master)
+
+1. 点击上面按钮
+2. 登录 GitHub
+3. 导入项目
+4. 配置环境变量（见下方）
+5. 点击 Deploy
+
+### 方式 2：Vercel CLI
+
+```bash
+# 安装 Vercel CLI
+npm i -g vercel
+
+# 登录
+vercel login
+
+# 部署
+vercel --prod
+```
+
+### 环境变量配置
+
+在 Vercel 项目设置中添加：
+
+| 变量名 | 值 |
+|--------|-----|
+| `DASHSCOPE_API_KEY` | 你的百炼 API Key |
+| `DASHSCOPE_BASE_URL` | `https://coding.dashscope.aliyuncs.com/v1` |
+| `DASHSCOPE_MODEL` | `qwen3.5-plus` |
+
+### 自动部署
+
+配置完成后，每次 push 到 main 分支会自动部署：
+
+```
+GitHub Push → Vercel 构建 → 自动部署 → 生成预览链接
+```
