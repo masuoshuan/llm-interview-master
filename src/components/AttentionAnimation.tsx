@@ -7,10 +7,10 @@ interface AttentionMatrixProps {
   sequenceLength?: number;
 }
 
-export function AttentionAnimation(_props: AttentionMatrixProps) {
+export function AttentionAnimation({ sequenceLength = 4 }: AttentionMatrixProps) {
   const [activeRow, setActiveRow] = useState<number | null>(null);
-  
   const words = ["I", "love", "machine", "learning"];
+  
   
   return (
     <div className="p-8 bg-white/5 rounded-2xl">
