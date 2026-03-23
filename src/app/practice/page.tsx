@@ -1,254 +1,328 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, CheckCircle, BookOpen, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Send, Sparkles, Loader2, MessageSquare, Plus, Trash2, ChevronRight, BookOpen, ThumbsUp, ThumbsDown } from "lucide-react";
 
-interface Question {
-  question: string;
-  answer: string;
-  difficulty: string;
-  topic: string;
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
-export default function PracticePage() {
-  const [topic, setTopic] = useState("Transformer 架构");
-  const [difficulty, setDifficulty] = useState("medium");
-  const [question, setQuestion] = useState<Question | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [feedback, setFeedback] = useState<'helpful' | 'not-helpful' | null>(null);
+interface Topic {
+  id: string;
+  name: string;
+  icon: string;
+  count: number;
+}
 
-  const generateQuestion = async () => {
+const topics: Topic[] = [
+  { id: 'transformer', name: 'Transformer 架构', icon: '🧠', count: 24 },
+  { id: 'attention', name: 'Attention 机制', icon: '✨', count: 18 },
+  { id: 'llm-basics', name: '大模型基础', icon: '📚', count: 32 },
+  { id: 'fine-tuning', name: '微调技术', icon: '🔧', count: 15 },
+  { id: 'prompt', name: 'Prompt Engineering', icon: '💡', count: 21 },
+  { id: 'rlhf', name: 'RLHF', icon: '🎯', count: 12 },
+];
+
+export default function PracticePage() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const sendMessage = async (content?: string) => {
+    const messageContent = content || input;
+    if (!messageContent.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: messageContent,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
     setLoading(true);
-    setShowAnswer(false);
-    setFeedback(null);
-    
+
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, difficulty }),
+        body: JSON.stringify({
+          topic: selectedTopic || 'general',
+          difficulty: 'medium',
+          question: messageContent,
+        }),
       });
 
       if (!response.ok) throw new Error('生成失败');
       
       const data = await response.json();
-      setQuestion(data);
+      
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.answer || data.question || '抱歉，我暂时无法回答这个问题。',
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error:', error);
-      alert('生成问题失败，请稍后重试');
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '抱歉，出现了一些问题。请稍后重试。',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    setSelectedTopic(null);
+  };
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-white">面试练习</h1>
-              <p className="text-purple-200">AI 为你生成个性化面试问题</p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Controls */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="glass-card p-6 mb-8"
-        >
-          <div className="grid md:grid-cols-3 gap-4 mb-6">
-            <div>
-              <label className="block text-purple-200 mb-2 text-sm font-medium">📚 主题</label>
-              <select
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                className="w-full bg-white/10 border border-purple-400/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all min-h-[48px]"
-              >
-                <option value="Transformer 架构">Transformer 架构</option>
-                <option value="Attention 机制">Attention 机制</option>
-                <option value="大模型基础">大模型基础</option>
-                <option value="微调技术">微调技术</option>
-                <option value="Prompt Engineering">Prompt Engineering</option>
-                <option value="RLHF">RLHF</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-purple-200 mb-2 text-sm font-medium">📊 难度</label>
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full bg-white/10 border border-purple-400/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all min-h-[48px]"
-              >
-                <option value="easy">🟢 简单</option>
-                <option value="medium">🟡 中等</option>
-                <option value="hard">🔴 困难</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={generateQuestion}
-                disabled={loading}
-                className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> 生成中...</>
-                ) : (
-                  <><Sparkles className="w-5 h-5" /> 生成问题</>
-                )}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Question Display */}
-        <AnimatePresence>
-          {question && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+    <div className="h-screen flex bg-gray-50">
+      {/* Sidebar - Topics */}
+      <aside className="w-72 bg-white border-r border-gray-200 flex flex-col">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900 mb-1">学习主题</h2>
+          <p className="text-sm text-gray-500">选择一个主题开始对话</p>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {topics.map((topic) => (
+            <button
+              key={topic.id}
+              onClick={() => setSelectedTopic(topic.id)}
+              className={`w-full text-left p-4 rounded-xl transition-all ${
+                selectedTopic === topic.id
+                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
+                  : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+              }`}
             >
-              {/* Question Card */}
-              <motion.div
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                className="glass-card p-6 border-l-4 border-purple-400"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 font-bold text-white text-lg">
-                    Q
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold text-white mb-3 leading-relaxed">{question.question}</h2>
-                    <div className="flex items-center gap-3">
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
-                        question.difficulty === "easy" ? "bg-green-600/80" :
-                        question.difficulty === "medium" ? "bg-yellow-600/80" : "bg-red-600/80"
-                      } text-white`}>
-                        {question.difficulty === "easy" ? "🟢 简单" :
-                         question.difficulty === "medium" ? "🟡 中等" : "🔴 困难"}
-                      </span>
-                      <span className="text-purple-300 text-sm">•</span>
-                      <span className="text-purple-200 text-sm">{question.topic}</span>
-                    </div>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{topic.icon}</span>
+                <div className="flex-1">
+                  <div className="font-semibold">{topic.name}</div>
+                  <div className={`text-xs ${selectedTopic === topic.id ? 'text-orange-100' : 'text-gray-500'}`}>
+                    {topic.count} 个问题
                   </div>
                 </div>
-              </motion.div>
+                <ChevronRight className={`w-5 h-5 ${selectedTopic === topic.id ? 'text-white' : 'text-gray-400'}`} />
+              </div>
+            </button>
+          ))}
+        </div>
 
-              {/* Answer Toggle */}
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                onClick={() => setShowAnswer(!showAnswer)}
-                className="w-full glass-card hover:bg-white/20 rounded-xl px-6 py-4 text-white font-semibold transition-all flex items-center justify-center gap-2 min-h-[56px]"
-              >
-                <BookOpen className="w-5 h-5" />
-                {showAnswer ? "隐藏答案" : "查看答案"}
-              </motion.button>
+        <div className="p-4 border-t border-gray-200">
+          <button
+            onClick={clearChat}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+            清空对话
+          </button>
+        </div>
+      </aside>
 
-              {/* Answer Card */}
-              {showAnswer && (
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-orange-500" />
+            <div>
+              <h1 className="font-bold text-gray-900">
+                {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : '自由对话'}
+              </h1>
+              <p className="text-xs text-gray-500">AI 面试助手</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">
+              {messages.length} 条消息
+            </span>
+          </div>
+        </header>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {messages.length === 0 ? (
+            <EmptyState onSelectTopic={sendMessage} />
+          ) : (
+            <>
+              {messages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              {loading && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="glass-card rounded-2xl p-6 border border-green-500/30 bg-gradient-to-br from-green-600/20 to-emerald-600/20"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3"
                 >
-                  <div className="flex items-start gap-4 mb-4">
-                    <CheckCircle className="w-10 h-10 text-green-400 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white mb-2">参考答案</h3>
-                      <p className="text-purple-200 text-sm mb-4">
-                        仔细阅读答案，理解关键概念和解题思路
-                      </p>
-                    </div>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
                   </div>
-                  
-                  <div className="prose prose-invert max-w-none mb-6">
-                    <div className="text-purple-100 whitespace-pre-line leading-relaxed bg-black/20 rounded-xl p-6">
-                      {question.answer}
+                  <div className="bg-white rounded-2xl rounded-tl-sm p-4 shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                      <span className="text-gray-500 text-sm">正在思考...</span>
                     </div>
-                  </div>
-
-                  {/* Feedback */}
-                  <div className="flex items-center gap-4 pt-4 border-t border-white/10">
-                    <span className="text-purple-200 text-sm">这个答案有帮助吗？</span>
-                    <button
-                      onClick={() => setFeedback('helpful')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                        feedback === 'helpful' 
-                          ? 'bg-green-600 text-white' 
-                          : 'bg-white/10 hover:bg-white/20 text-purple-200'
-                      }`}
-                    >
-                      <ThumbsUp className="w-4 h-4" /> 有帮助
-                    </button>
-                    <button
-                      onClick={() => setFeedback('not-helpful')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                        feedback === 'not-helpful' 
-                          ? 'bg-red-600 text-white' 
-                          : 'bg-white/10 hover:bg-white/20 text-purple-200'
-                      }`}
-                    >
-                      <ThumbsDown className="w-4 h-4" /> 需改进
-                    </button>
                   </div>
                 </motion.div>
               )}
-
-              {/* Next Question Button */}
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                onClick={generateQuestion}
-                className="w-full glass-card hover:bg-white/20 rounded-xl px-6 py-4 text-white font-semibold transition-all flex items-center justify-center gap-2 min-h-[56px]"
-              >
-                <RefreshCw className="w-5 h-5" />
-                生成下一题
-              </motion.button>
-            </motion.div>
+              <div ref={messagesEndRef} />
+            </>
           )}
-        </AnimatePresence>
+        </div>
 
-        {/* Empty State */}
-        {!question && !loading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="glass-card rounded-2xl p-12 text-center"
-          >
-            <div className="w-20 h-20 rounded-full bg-purple-600/30 flex items-center justify-center mx-auto mb-6">
-              <Sparkles className="w-10 h-10 text-purple-400" />
+        {/* Input Area */}
+        <div className="p-6 bg-white border-t border-gray-200">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-end gap-3 bg-gray-50 rounded-2xl p-2 border border-gray-200 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-200 transition-all">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="输入你的问题，例如：'请解释 Transformer 的 Self-Attention 机制'..."
+                className="flex-1 bg-transparent border-none outline-none resize-none px-4 py-3 text-gray-900 placeholder-gray-400 max-h-32 min-h-[56px]"
+                rows={1}
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={loading || !input.trim()}
+                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-gray-300 disabled:to-gray-400 text-white px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+                发送
+              </button>
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">准备开始练习</h3>
-            <p className="text-purple-200 mb-6 max-w-md mx-auto">
-              选择主题和难度，点击&quot;生成问题&quot;开始你的面试练习
+            <p className="text-xs text-gray-500 text-center mt-3">
+              按 Enter 发送，Shift + Enter 换行
             </p>
-            <button
-              onClick={generateQuestion}
-              className="btn-primary mx-auto"
-            >
-              <Sparkles className="w-5 h-5" /> 开始练习
-            </button>
-          </motion.div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function MessageBubble({ message }: { message: Message }) {
+  const isUser = message.role === 'user';
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+    >
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+        isUser 
+          ? 'bg-gradient-to-br from-blue-500 to-indigo-500' 
+          : 'bg-gradient-to-br from-orange-500 to-red-500'
+      }`}>
+        {isUser ? (
+          <span className="text-white text-sm font-bold">你</span>
+        ) : (
+          <Sparkles className="w-4 h-4 text-white" />
         )}
       </div>
-    </main>
+      
+      <div className={`max-w-2xl ${isUser ? 'text-right' : ''}`}>
+        <div className={`rounded-2xl p-4 shadow-sm ${
+          isUser 
+            ? 'bg-blue-500 text-white rounded-tr-sm' 
+            : 'bg-white text-gray-900 rounded-tl-sm border border-gray-200'
+        }`}>
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        </div>
+        
+        {!isUser && (
+          <div className="flex items-center gap-2 mt-2">
+            <button className="text-gray-400 hover:text-green-500 transition-colors">
+              <ThumbsUp className="w-4 h-4" />
+            </button>
+            <button className="text-gray-400 hover:text-red-500 transition-colors">
+              <ThumbsDown className="w-4 h-4" />
+            </button>
+            <button className="text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1 text-xs">
+              <BookOpen className="w-3 h-3" />
+              引用来源
+            </button>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function EmptyState({ onSelectTopic }: { onSelectTopic: (topic: string) => void }) {
+  const suggestions = [
+    "请解释 Transformer 的 Self-Attention 机制",
+    "BERT 和 GPT 有什么区别？",
+    "什么是 LoRA 微调？",
+    "如何优化大模型的推理速度？",
+  ];
+
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center max-w-2xl">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center mx-auto mb-6"
+        >
+          <Sparkles className="w-10 h-10 text-white" />
+        </motion.div>
+        
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">
+          开始你的面试练习
+        </h2>
+        <p className="text-gray-600 mb-8">
+          选择一个主题或直接提问，AI 会为你详细解答
+        </p>
+        
+        <div className="grid sm:grid-cols-2 gap-3">
+          {suggestions.map((suggestion, index) => (
+            <motion.button
+              key={suggestion}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              onClick={() => onSelectTopic(suggestion)}
+              className="text-left p-4 bg-white hover:bg-orange-50 border border-gray-200 hover:border-orange-300 rounded-xl transition-all text-sm text-gray-700"
+            >
+              {suggestion}
+            </motion.button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
