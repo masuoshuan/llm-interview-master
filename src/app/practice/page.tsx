@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles, Loader2, CheckCircle, BookOpen, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle, BookOpen, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
 
 interface Question {
   question: string;
@@ -238,7 +238,7 @@ export default function PracticePage() {
             </div>
             <h3 className="text-2xl font-bold text-white mb-3">准备开始练习</h3>
             <p className="text-purple-200 mb-6 max-w-md mx-auto">
-              选择主题和难度，点击"生成问题"开始你的面试练习
+              选择主题和难度，点击&quot;生成问题&quot;开始你的面试练习
             </p>
             <button
               onClick={generateQuestion}
