@@ -46,3 +46,26 @@ npm start
 ## 📝 License
 
 MIT
+
+## 🔑 AI 配置
+
+使用百炼 AI 生成面试问题：
+
+```bash
+# 复制环境变量文件
+cp .env.local.example .env.local
+
+# 编辑 .env.local 填入你的 API Key
+```
+
+### 支持的模型
+
+- **qwen3.5-plus** (推荐) - 支持图片理解
+- **kimi-k2.5** - 支持图片理解
+- **glm-5**
+- **MiniMax-M2.5**
+
+### API 配置
+
+- Base URL: `https://coding.dashscope.aliyuncs.com/v1`
+- 协议：兼容 Anthropic 格式
