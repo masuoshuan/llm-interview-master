@@ -2,13 +2,24 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles, Loader2, MessageSquare, Plus, Trash2, ChevronRight, BookOpen, ThumbsUp, ThumbsDown } from "lucide-react";
+import {
+  Send, Sparkles, Loader2, MessageSquare, Trash2, ChevronRight,
+  BookOpen, ThumbsUp, ThumbsDown, Lightbulb, FileText, Zap,
+} from "lucide-react";
+import Link from "next/link";
+
+interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  recommendedQuestions?: string[];
+  source?: 'cache' | 'llm' | 'rag';
 }
 
 interface Topic {
@@ -27,24 +38,31 @@ const topics: Topic[] = [
   { id: 'rlhf', name: 'RLHF', icon: '🎯', count: 12 },
 ];
 
+// 将 Message 转换为 API 历史格式（去掉 UI 特定字段）
+function toHistory(messages: Message[]): HistoryMessage[] {
+  return messages.map(m => ({ role: m.role, content: m.content }));
+}
+
 export default function PracticePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hasResume, setHasResume] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, [messages]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // 检查是否已上传简历
+    setHasResume(!!localStorage.getItem('resume_uploaded'));
+  }, []);
 
   const sendMessage = async (content?: string) => {
     const messageContent = content || input;
-    if (!messageContent.trim()) return;
+    if (!messageContent.trim() || loading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -53,11 +71,13 @@ export default function PracticePage() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setLoading(true);
 
     try {
+      // 传递完整历史（记忆机制）
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,30 +85,32 @@ export default function PracticePage() {
           topic: selectedTopic || 'general',
           difficulty: 'medium',
           question: messageContent,
+          history: toHistory(messages), // 传递历史消息
         }),
       });
 
       if (!response.ok) throw new Error('生成失败');
-      
+
       const data = await response.json();
-      
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: data.answer || data.question || '抱歉，我暂时无法回答这个问题。',
         timestamp: new Date(),
+        recommendedQuestions: data.recommendedQuestions || [],
+        source: data._source,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error:', error);
-      const errorMessage: Message = {
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '抱歉，出现了一些问题。请稍后重试。',
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      }]);
     } finally {
       setLoading(false);
     }
@@ -108,13 +130,13 @@ export default function PracticePage() {
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* Sidebar - Topics */}
+      {/* Sidebar */}
       <aside className="w-72 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900 mb-1">学习主题</h2>
           <p className="text-sm text-gray-500">选择一个主题开始对话</p>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {topics.map((topic) => (
             <button
@@ -140,10 +162,22 @@ export default function PracticePage() {
           ))}
         </div>
 
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 space-y-2">
+          {/* 简历入口 */}
+          <Link
+            href="/resume"
+            className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-all text-sm font-medium ${
+              hasResume
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            {hasResume ? '✓ 简历已上传' : '上传简历（RAG）'}
+          </Link>
           <button
             onClick={clearChat}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all text-sm"
           >
             <Trash2 className="w-4 h-4" />
             清空对话
@@ -152,22 +186,27 @@ export default function PracticePage() {
       </aside>
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
             <MessageSquare className="w-5 h-5 text-orange-500" />
             <div>
               <h1 className="font-bold text-gray-900">
                 {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : '自由对话'}
               </h1>
-              <p className="text-xs text-gray-500">AI 面试助手</p>
+              <p className="text-xs text-gray-500">AI 面试助手 · 记忆最近 6 轮对话</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">
-              {messages.length} 条消息
-            </span>
+          <div className="flex items-center gap-3">
+            {messages.length > 0 && (
+              <span className="text-sm text-gray-400">{messages.length} 条消息</span>
+            )}
+            {hasResume && (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1">
+                <FileText className="w-3 h-3" /> 简历 RAG 已启用
+              </span>
+            )}
           </div>
         </header>
 
@@ -177,9 +216,15 @@ export default function PracticePage() {
             <EmptyState onSelectTopic={sendMessage} />
           ) : (
             <>
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
+              <AnimatePresence>
+                {messages.map((message) => (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    onRecommendClick={sendMessage}
+                  />
+                ))}
+              </AnimatePresence>
               {loading && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -203,13 +248,13 @@ export default function PracticePage() {
         </div>
 
         {/* Input Area */}
-        <div className="p-6 bg-white border-t border-gray-200">
+        <div className="p-6 bg-white border-t border-gray-200 flex-shrink-0">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-end gap-3 bg-gray-50 rounded-2xl p-2 border border-gray-200 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-200 transition-all">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder="输入你的问题，例如：'请解释 Transformer 的 Self-Attention 机制'..."
                 className="flex-1 bg-transparent border-none outline-none resize-none px-4 py-3 text-gray-900 placeholder-gray-400 max-h-32 min-h-[56px]"
                 rows={1}
@@ -217,14 +262,14 @@ export default function PracticePage() {
               <button
                 onClick={() => sendMessage()}
                 disabled={loading || !input.trim()}
-                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-gray-300 disabled:to-gray-400 text-white px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg disabled:cursor-not-allowed"
+                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-gray-300 disabled:to-gray-400 text-white px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg disabled:cursor-not-allowed flex-shrink-0"
               >
                 <Send className="w-4 h-4" />
                 发送
               </button>
             </div>
-            <p className="text-xs text-gray-500 text-center mt-3">
-              按 Enter 发送，Shift + Enter 换行
+            <p className="text-xs text-gray-400 text-center mt-2">
+              Enter 发送 · Shift+Enter 换行 · 自动记忆对话上下文
             </p>
           </div>
         </div>
@@ -233,18 +278,26 @@ export default function PracticePage() {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onRecommendClick,
+}: {
+  message: Message;
+  onRecommendClick: (q: string) => void;
+}) {
   const isUser = message.role === 'user';
-  
+  const [liked, setLiked] = useState<boolean | null>(null);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
       className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
     >
       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-        isUser 
-          ? 'bg-gradient-to-br from-blue-500 to-indigo-500' 
+        isUser
+          ? 'bg-gradient-to-br from-blue-500 to-indigo-500'
           : 'bg-gradient-to-br from-orange-500 to-red-500'
       }`}>
         {isUser ? (
@@ -253,28 +306,77 @@ function MessageBubble({ message }: { message: Message }) {
           <Sparkles className="w-4 h-4 text-white" />
         )}
       </div>
-      
-      <div className={`max-w-2xl ${isUser ? 'text-right' : ''}`}>
-        <div className={`rounded-2xl p-4 shadow-sm ${
-          isUser 
-            ? 'bg-blue-500 text-white rounded-tr-sm' 
+
+      <div className={`flex-1 min-w-0 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        <div className={`rounded-2xl p-4 shadow-sm max-w-2xl ${
+          isUser
+            ? 'bg-blue-500 text-white rounded-tr-sm'
             : 'bg-white text-gray-900 rounded-tl-sm border border-gray-200'
         }`}>
-          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap leading-relaxed text-sm">{message.content}</p>
         </div>
-        
+
+        {/* 助手消息底部工具栏 */}
         {!isUser && (
-          <div className="flex items-center gap-2 mt-2">
-            <button className="text-gray-400 hover:text-green-500 transition-colors">
-              <ThumbsUp className="w-4 h-4" />
-            </button>
-            <button className="text-gray-400 hover:text-red-500 transition-colors">
-              <ThumbsDown className="w-4 h-4" />
-            </button>
-            <button className="text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1 text-xs">
-              <BookOpen className="w-3 h-3" />
-              引用来源
-            </button>
+          <div className="mt-2 space-y-3">
+            <div className="flex items-center gap-3">
+              {/* 来源标签 */}
+              {message.source && (
+                <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  message.source === 'cache'
+                    ? 'bg-green-100 text-green-700'
+                    : message.source === 'rag'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {message.source === 'cache' && <><Zap className="w-3 h-3" />缓存</>}
+                  {message.source === 'rag' && <><FileText className="w-3 h-3" />简历 RAG</>}
+                  {message.source === 'llm' && <><Sparkles className="w-3 h-3" />AI 生成</>}
+                </span>
+              )}
+              <button
+                onClick={() => setLiked(true)}
+                className={`transition-colors ${liked === true ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}`}
+              >
+                <ThumbsUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setLiked(false)}
+                className={`transition-colors ${liked === false ? 'text-red-500' : 'text-gray-400 hover:text-red-500'}`}
+              >
+                <ThumbsDown className="w-4 h-4" />
+              </button>
+              <button className="text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1 text-xs">
+                <BookOpen className="w-3 h-3" />
+                引用来源
+              </button>
+            </div>
+
+            {/* 推荐问题 */}
+            {message.recommendedQuestions && message.recommendedQuestions.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="space-y-2"
+              >
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <Lightbulb className="w-3 h-3 text-yellow-500" />
+                  继续探索
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {message.recommendedQuestions.map((q, i) => (
+                    <button
+                      key={i}
+                      onClick={() => onRecommendClick(q)}
+                      className="text-xs text-left px-3 py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 text-orange-800 rounded-xl transition-all max-w-xs"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
           </div>
         )}
       </div>
@@ -287,12 +389,14 @@ function EmptyState({ onSelectTopic }: { onSelectTopic: (topic: string) => void 
     "请解释 Transformer 的 Self-Attention 机制",
     "BERT 和 GPT 有什么区别？",
     "什么是 LoRA 微调？",
+    "什么是 RLHF？",
     "如何优化大模型的推理速度？",
+    "Positional Encoding 有哪些方式？",
   ];
 
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center max-w-2xl">
+    <div className="h-full flex items-center justify-center py-12">
+      <div className="text-center max-w-2xl w-full">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -300,23 +404,23 @@ function EmptyState({ onSelectTopic }: { onSelectTopic: (topic: string) => void 
         >
           <Sparkles className="w-10 h-10 text-white" />
         </motion.div>
-        
+
         <h2 className="text-2xl font-bold text-gray-900 mb-3">
           开始你的面试练习
         </h2>
-        <p className="text-gray-600 mb-8">
-          选择一个主题或直接提问，AI 会为你详细解答
+        <p className="text-gray-500 mb-8 text-sm">
+          选择一个主题或直接提问，AI 会为你详细解答并推荐相关问题
         </p>
-        
+
         <div className="grid sm:grid-cols-2 gap-3">
           {suggestions.map((suggestion, index) => (
             <motion.button
               key={suggestion}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.08 }}
               onClick={() => onSelectTopic(suggestion)}
-              className="text-left p-4 bg-white hover:bg-orange-50 border border-gray-200 hover:border-orange-300 rounded-xl transition-all text-sm text-gray-700"
+              className="text-left p-4 bg-white hover:bg-orange-50 border border-gray-200 hover:border-orange-300 rounded-xl transition-all text-sm text-gray-700 shadow-sm"
             >
               {suggestion}
             </motion.button>

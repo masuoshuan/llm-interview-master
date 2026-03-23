@@ -1,28 +1,42 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 interface AttentionMatrixProps {
   sequenceLength?: number;
 }
 
+// 预定义的注意力权重矩阵（避免 Math.random 导致的水合不一致）
+const ATTENTION_WEIGHTS = [
+  [1.0, 0.3, 0.15, 0.1],
+  [0.2, 1.0, 0.4, 0.25],
+  [0.1, 0.35, 1.0, 0.45],
+  [0.15, 0.2, 0.38, 1.0],
+];
+
 export function AttentionAnimation({ sequenceLength = 4 }: AttentionMatrixProps) {
   const [activeRow, setActiveRow] = useState<number | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
   const words = ["I", "love", "machine", "learning"];
-  
-  
+
+  const attentionWeights = useMemo(() => ATTENTION_WEIGHTS, []);
+
   return (
     <div className="p-8 bg-white/5 rounded-2xl">
-      <h3 className="text-xl font-bold text-white mb-6">Self-Attention 可视化</h3>
-      
+      <h3 className="text-xl font-bold text-white mb-2">Self-Attention 可视化</h3>
+      <p className="text-purple-300 text-sm mb-6">悬停单词查看注意力权重分布</p>
+
       {/* Input Sequence */}
       <div className="flex gap-2 mb-8 justify-center">
         {words.map((word, i) => (
           <motion.div
-            key={i}
-            className="px-4 py-2 bg-purple-600 rounded-lg text-white font-medium"
-            whileHover={{ scale: 1.1 }}
+            key={word}
+            className={`px-4 py-2 rounded-lg text-white font-medium cursor-pointer transition-all ${
+              activeRow === i ? 'bg-purple-400 shadow-lg shadow-purple-400/40' : 'bg-purple-600'
+            }`}
+            whileHover={{ scale: 1.1, y: -2 }}
+            whileTap={{ scale: 0.95 }}
             onMouseEnter={() => setActiveRow(i)}
             onMouseLeave={() => setActiveRow(null)}
           >
@@ -35,47 +49,73 @@ export function AttentionAnimation({ sequenceLength = 4 }: AttentionMatrixProps)
       <div className="grid grid-cols-5 gap-2 max-w-md mx-auto">
         {/* Header row */}
         <div className="w-12 h-12" />
-        {words.map((word, i) => (
-          <div key={`header-${i}`} className="w-12 h-12 flex items-center justify-center text-purple-300 text-sm">
+        {words.map((word) => (
+          <div key={`header-${word}`} className="w-12 h-12 flex items-center justify-center text-purple-300 text-xs font-medium">
             {word}
           </div>
         ))}
-        
+
         {/* Matrix rows */}
-        {words.map((_, rowIndex) => (
-          <>
-            <div key={`label-${rowIndex}`} className="w-12 h-12 flex items-center justify-center text-purple-300 text-sm">
-              {words[rowIndex]}
+        {words.map((rowWord, rowIndex) => (
+          <motion.div key={`row-${rowWord}`} className="contents">
+            <div className="w-12 h-12 flex items-center justify-center text-purple-300 text-xs font-medium">
+              {rowWord}
             </div>
             {words.map((_, colIndex) => {
-              const intensity = rowIndex === colIndex ? 1 : Math.random() * 0.5;
+              const weight = attentionWeights[rowIndex][colIndex];
+              const isActive = activeRow === rowIndex;
               return (
                 <motion.div
                   key={`cell-${rowIndex}-${colIndex}`}
-                  className="w-12 h-12 rounded border border-purple-500/30"
+                  className="w-12 h-12 rounded-lg border border-purple-500/30 flex items-center justify-center"
                   style={{
-                    backgroundColor: `rgba(147, 51, 234, ${activeRow === rowIndex ? intensity : intensity * 0.3})`,
+                    backgroundColor: `rgba(147, 51, 234, ${isActive ? weight : weight * 0.25})`,
                   }}
                   animate={{
-                    scale: activeRow === rowIndex ? [1, 1.05, 1] : 1,
+                    scale: isActive ? [1, 1.06, 1] : 1,
+                    borderColor: isActive ? 'rgba(167, 139, 250, 0.6)' : 'rgba(147, 51, 234, 0.3)',
                   }}
                   transition={{
-                    duration: 0.3,
-                    repeat: activeRow === rowIndex ? Infinity : 0,
+                    duration: 0.8,
+                    repeat: isActive ? Infinity : 0,
+                    ease: "easeInOut",
                   }}
-                />
+                >
+                  {isActive && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-white text-xs font-bold"
+                    >
+                      {weight.toFixed(1)}
+                    </motion.span>
+                  )}
+                </motion.div>
               );
             })}
-          </>
+          </motion.div>
         ))}
       </div>
 
+      {/* Legend */}
+      <div className="mt-6 flex items-center justify-center gap-4">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-purple-600/25 border border-purple-500/30" />
+          <span className="text-purple-400 text-xs">低注意力</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-purple-400 border border-purple-300/50" />
+          <span className="text-purple-400 text-xs">高注意力</span>
+        </div>
+      </div>
+
       {/* Explanation */}
-      <div className="mt-8 p-4 bg-purple-900/30 rounded-xl">
+      <div className="mt-6 p-4 bg-purple-900/30 rounded-xl">
         <p className="text-purple-200 text-sm">
           <strong className="text-white">说明：</strong>
-          将鼠标悬停在上方单词上，查看该单词对其他单词的注意力权重。
-          颜色越深表示注意力越强。Self-Attention 允许每个位置关注序列中的所有位置。
+          {activeRow !== null
+            ? `「${words[activeRow]}」对各词的注意力权重，对角线最大（自注意力）。`
+            : '悬停上方单词，查看该词对序列中其他词的注意力权重。颜色越深表示关注度越高。'}
         </p>
       </div>
     </div>
