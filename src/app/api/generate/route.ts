@@ -1,127 +1,86 @@
 import { NextResponse } from 'next/server';
 
-/**
- * 多 LLM 提供商支持
- * 优先级：百炼 > 恩牛 > 火山引擎 > 硅基流动 > 通义千问
- */
-const providers = [
-  {
-    name: 'dashscope',
-    baseUrl: process.env.DASHSCOPE_BASE_URL || 'https://coding.dashscope.aliyuncs.com/v1',
-    apiKey: process.env.DASHSCOPE_API_KEY,
-    model: process.env.DASHSCOPE_MODEL || 'qwen3.5-plus',
-  },
-  {
-    name: 'ennew',
-    baseUrl: process.env.ENNEW_LLM_BASE_URL,
-    apiKey: process.env.ENNEW_LLM_API_KEY,
-    model: process.env.ENNEW_LLM_MODEL || 'Qwen3-235B-A22B-FP8',
-  },
-  {
-    name: 'volcengine',
-    baseUrl: process.env.VOLCENGINE_LLM_BASE_URL,
-    apiKey: process.env.VOLCENGINE_LLM_API_KEY,
-    model: process.env.VOLCENGINE_LLM_MODEL || 'deepseek-v3-2-251201',
-  },
-  {
-    name: 'siliconflow',
-    baseUrl: process.env.SILICONFLOW_LLM_BASE_URL,
-    apiKey: process.env.SILICONFLOW_LLM_API_KEY,
-    model: process.env.SILICONFLOW_LLM_MODEL,
-  },
-  {
-    name: 'qwen',
-    baseUrl: process.env.QWEN_LLM_BASE_URL,
-    apiKey: process.env.QWEN_LLM_API_KEY,
-    model: process.env.QWEN_LLM_MODEL || 'qwen3-max',
-  },
-];
-
 export async function POST(request: Request) {
   try {
-    const { topic, difficulty } = await request.json();
+    const body = await request.json();
+    const { topic, difficulty, question } = body;
 
-    // 选择可用的提供商（按优先级）
-    const provider = providers.find(p => p.apiKey) || providers[0];
-    
-    if (!provider.apiKey) {
+    // 获取环境变量
+    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const baseUrl = process.env.DASHSCOPE_BASE_URL || 'https://coding.dashscope.aliyuncs.com/v1';
+    const model = process.env.DASHSCOPE_MODEL || 'qwen3.5-plus';
+
+    // 检查 API Key
+    if (!apiKey) {
+      console.error('DASHSCOPE_API_KEY not configured');
       return NextResponse.json(
-        { error: '请配置 API Key，复制 .env.local.example 为 .env.local 并填入密钥' },
+        { error: 'API Key 未配置' },
         { status: 500 }
       );
     }
 
-    const systemPrompt = `你是一位专业的 AI/ML 面试专家，负责生成面试问题和详细答案。
+    // 构建提示词
+    const systemPrompt = `你是一位专业的 AI/ML 面试专家，负责帮助用户准备技术面试。
 
-请根据用户选择的主题和难度生成：
-1. 一个面试问题（要有深度，能考察候选人的理解）
-2. 详细的答案解析（包含关键概念、公式、示例）
+请根据用户的问题或主题，提供：
+1. 清晰的解答
+2. 关键概念说明
+3. 实际例子（如适用）
+4. 相关公式或代码（如适用）
 
-难度级别：
-- easy: 基础概念理解
-- medium: 技术细节和原理
-- hard: 深入分析和实际应用`;
+保持回答专业、准确、易懂。`;
 
-    const userPrompt = `请生成一个关于"${topic}"的面试问题，难度：${difficulty}。
+    const userPrompt = question 
+      ? `请回答这个问题：${question}`
+      : `请生成一个关于"${topic || '大模型'}"的面试问题，难度：${difficulty || 'medium'}，并提供详细答案。`;
 
-请以 JSON 格式返回：
-{
-  "question": "问题内容",
-  "answer": "详细答案，包含关键点和解释",
-  "difficulty": "${difficulty}",
-  "topic": "${topic}"
-}`;
-
-    const response = await fetch(`${provider.baseUrl}/messages`, {
+    // 调用百炼 API
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${provider.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: provider.model,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
         max_tokens: 2000,
         temperature: 0.7,
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error(`${provider.name} API Error:`, error);
-      throw new Error(`${provider.name} API request failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error('API Error:', response.status, errorText);
+      return NextResponse.json(
+        { 
+          error: `API 请求失败：${response.status}`,
+          details: errorText 
+        },
+        { status: response.status }
+      );
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
     
-    let questionData;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      questionData = jsonMatch ? JSON.parse(jsonMatch[0]) : {
-        question: content,
-        answer: '请查看相关文档获取详细答案。',
-        difficulty,
-        topic
-      };
-    } catch {
-      questionData = {
-        question: content,
-        answer: '请查看相关文档获取详细答案。',
-        difficulty,
-        topic
-      };
-    }
+    // 提取回答
+    const answer = data.choices?.[0]?.message?.content || '抱歉，我无法生成回答。';
 
     return NextResponse.json({
-      ...questionData,
-      _provider: provider.name, // 用于调试
+      answer,
+      topic: topic || 'general',
+      difficulty: difficulty || 'medium',
     });
   } catch (error) {
     console.error('Generate error:', error);
     return NextResponse.json(
-      { error: '生成失败，请稍后重试' },
+      { 
+        error: '生成失败，请稍后重试',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
