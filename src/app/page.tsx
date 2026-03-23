@@ -1,201 +1,166 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Brain, BookOpen, MessageSquare, Sparkles, ArrowRight, Zap, Shield, Users } from "lucide-react";
+import { BookOpen, Sparkles, ArrowRight, MessageSquare, Zap, Brain } from "lucide-react";
 import Link from "next/link";
-
-const topics = [
-  { id: "transformer", name: "Transformer 架构", icon: Brain, color: "from-blue-500 to-purple-500", description: "深入理解注意力机制" },
-  { id: "attention", name: "Attention 机制", icon: Sparkles, color: "from-green-500 to-teal-500", description: "Self-Attention 详解" },
-  { id: "llm-basics", name: "大模型基础", icon: BookOpen, color: "from-orange-500 to-red-500", description: "核心概念与原理" },
-  { id: "fine-tuning", name: "微调技术", icon: MessageSquare, color: "from-pink-500 to-rose-500", description: "LoRA/P-Tuning 等" },
-];
-
-const features = [
-  {
-    icon: Brain,
-    title: "智能问题生成",
-    description: "AI 根据难度和主题生成高质量面试问题",
-    color: "text-purple-400",
-  },
-  {
-    icon: BookOpen,
-    title: "详细讲解",
-    description: "逐步解答，深入理解每个核心概念",
-    color: "text-blue-400",
-  },
-  {
-    icon: Zap,
-    title: "动画演示",
-    description: "可视化展示复杂概念，学习更高效",
-    color: "text-yellow-400",
-  },
-  {
-    icon: Shield,
-    title: "面试模拟",
-    description: "真实面试场景，提升应变能力",
-    color: "text-green-400",
-  },
-  {
-    icon: Users,
-    title: "进度追踪",
-    description: "记录学习轨迹，针对性提升",
-    color: "text-pink-400",
-  },
-  {
-    icon: Sparkles,
-    title: "即时反馈",
-    description: "实时评估答案，指出改进方向",
-    color: "text-cyan-400",
-  },
-];
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-teal-50">
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">LLM Interview Master</span>
+            </div>
+            <nav className="flex items-center gap-6">
+              <Link href="/practice" className="text-gray-600 hover:text-gray-900 transition-colors">
+                练习
+              </Link>
+              <Link href="/topics" className="text-gray-600 hover:text-gray-900 transition-colors">
+                主题
+              </Link>
+              <button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-5 py-2 rounded-lg font-medium transition-all hover:shadow-lg">
+                开始面试
+              </button>
+            </nav>
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section */}
-      <div className="container mx-auto px-4 py-20">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-20"
-        >
+      <section className="py-20 px-4">
+        <div className="max-w-4xl mx-auto text-center">
           <motion.div
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.4 }}
-            className="inline-block mb-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
           >
-            <span className="px-4 py-2 bg-purple-600/30 border border-purple-400/50 rounded-full text-purple-200 text-sm font-medium">
-              🚀 AI 驱动的面试准备平台
+            <span className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+              <Sparkles className="w-4 h-4" />
+              AI 驱动的面试准备平台
             </span>
+            
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+              像对话一样
+              <span className="block bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 bg-clip-text text-transparent">
+                准备技术面试
+              </span>
+            </h1>
+            
+            <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+              与 AI 进行自然对话，深入理解大模型核心概念，轻松应对技术面试
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/practice"
+                className="group inline-flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:shadow-xl hover:scale-105"
+              >
+                免费开始练习
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              
+              <Link
+                href="#features"
+                className="inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-200 px-8 py-4 rounded-xl text-lg font-semibold transition-all"
+              >
+                了解更多
+              </Link>
+            </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Features Preview */}
+      <section id="features" className="py-20 px-4 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">为什么选择我们？</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              专为 AI/ML 工程师设计的面试准备工具
+            </p>
+          </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
-            LLM Interview
-            <span className="block bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-              Master
-            </span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-purple-200 mb-10 max-w-3xl mx-auto leading-relaxed">
-            大模型面试学习平台 - 智能问题生成 · 详细讲解 · 动画演示
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="grid md:grid-cols-3 gap-8">
+            <FeatureCard
+              icon={MessageSquare}
+              title="对话式学习"
+              description="像聊天一样自然交互，随时追问，深入理解每个概念"
+              color="from-orange-500 to-red-500"
+            />
+            <FeatureCard
+              icon={Zap}
+              title="即时反馈"
+              description="实时评估你的答案，指出改进方向，快速提升"
+              color="from-yellow-500 to-orange-500"
+            />
+            <FeatureCard
+              icon={BookOpen}
+              title="系统知识"
+              description="覆盖 Transformer、Attention、微调等核心主题"
+              color="from-teal-500 to-blue-500"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 px-4">
+        <div className="max-w-4xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-12 text-center text-white shadow-2xl"
+          >
+            <h2 className="text-4xl font-bold mb-4">准备好开始了吗？</h2>
+            <p className="text-orange-100 text-lg mb-8 max-w-2xl mx-auto">
+              立即开始练习，提升你的 AI/ML 面试技能
+            </p>
             <Link
               href="/practice"
-              className="group inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/50"
+              className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-orange-600 px-10 py-5 rounded-full text-xl font-semibold transition-all hover:shadow-lg hover:scale-105"
             >
-              开始练习 
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              免费开始 <ArrowRight className="w-6 h-6" />
             </Link>
-            
-            <Link
-              href="#features"
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-full text-lg font-semibold transition-all hover:scale-105"
-            >
-              了解更多
-            </Link>
-          </div>
-        </motion.div>
-
-        {/* Topics Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl font-bold text-white text-center mb-10">
-            学习主题
-          </h2>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {topics.map((topic, index) => (
-              <motion.div
-                key={topic.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 + index * 0.1, duration: 0.4 }}
-                whileHover={{ scale: 1.05, y: -8 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Link
-                  href={`/topic/${topic.id}`}
-                  className={`block p-6 rounded-2xl bg-gradient-to-br ${topic.color} hover:shadow-2xl transition-all h-full`}
-                >
-                  <topic.icon className="w-14 h-14 text-white mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">{topic.name}</h3>
-                  <p className="text-white/80 text-sm">{topic.description}</p>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Features */}
-        <motion.div
-          id="features"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, duration: 0.6 }}
-          className="mb-20"
-        >
-          <h2 className="text-3xl font-bold text-white text-center mb-4">
-            核心特性
-          </h2>
-          <p className="text-purple-200 text-center mb-12 max-w-2xl mx-auto">
-            专为 AI/ML 工程师设计的面试准备工具
-          </p>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 + index * 0.1, duration: 0.4 }}
-                whileHover={{ y: -4 }}
-                className="glass-card p-6 rounded-2xl"
-              >
-                <feature.icon className={`w-12 h-12 ${feature.color} mb-4`} />
-                <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
-                <p className="text-purple-200 leading-relaxed">{feature.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* CTA Section */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1.2, duration: 0.5 }}
-          className="glass-card rounded-3xl p-12 text-center"
-        >
-          <h2 className="text-4xl font-bold text-white mb-4">
-            准备好开始了吗？
-          </h2>
-          <p className="text-purple-200 text-lg mb-8 max-w-2xl mx-auto">
-            立即开始练习，提升你的 AI/ML 面试技能
-          </p>
-          <Link
-            href="/practice"
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-10 py-5 rounded-full text-xl font-semibold transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/50"
-          >
-            免费开始 <ArrowRight className="w-6 h-6" />
-          </Link>
-        </motion.div>
-      </div>
+          </motion.div>
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-8">
-        <div className="container mx-auto px-4 text-center text-purple-300 text-sm">
-          <p>© 2026 LLM Interview Master. Built with Next.js + Framer Motion</p>
+      <footer className="border-t border-gray-200 py-8 bg-white">
+        <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+          <p>© 2026 LLM Interview Master. Built with ❤️ using Next.js</p>
         </div>
       </footer>
     </main>
+  );
+}
+
+function FeatureCard({ icon: Icon, title, description, color }: {
+  icon: any;
+  title: string;
+  description: string;
+  color: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      whileHover={{ y: -4 }}
+      className="bg-gray-50 rounded-2xl p-8 transition-all hover:shadow-lg"
+    >
+      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-6`}>
+        <Icon className="w-7 h-7 text-white" />
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
+      <p className="text-gray-600 leading-relaxed">{description}</p>
+    </motion.div>
   );
 }
