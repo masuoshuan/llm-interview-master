@@ -38,6 +38,15 @@ const topics: Topic[] = [
   { id: 'rlhf', name: 'RLHF', icon: '🎯', count: 12 },
 ];
 
+const TOPIC_INIT_QUESTIONS: Record<string, string> = {
+  transformer: '请给我出 3 道关于 Transformer 架构的面试题，覆盖不同难度，每道题给出详细答案。',
+  attention: '请给我出 3 道关于 Attention 机制的面试题，覆盖不同难度，每道题给出详细答案。',
+  'llm-basics': '请给我出 3 道大模型基础知识的面试题，覆盖不同难度，每道题给出详细答案。',
+  'fine-tuning': '请给我出 3 道关于大模型微调技术的面试题（LoRA、P-Tuning 等），每道题给出详细答案。',
+  prompt: '请给我出 3 道关于 Prompt Engineering 的面试题，覆盖不同难度，每道题给出详细答案。',
+  rlhf: '请给我出 3 道关于 RLHF 的面试题，覆盖不同难度，每道题给出详细答案。',
+};
+
 // 将 Message 转换为 API 历史格式（去掉 UI 特定字段）
 function toHistory(messages: Message[]): HistoryMessage[] {
   return messages.map(m => ({ role: m.role, content: m.content }));
@@ -50,15 +59,28 @@ export default function PracticePage() {
   const [loading, setLoading] = useState(false);
   const [hasResume, setHasResume] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastTopicRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    // 检查是否已上传简历
     setHasResume(!!localStorage.getItem('resume_uploaded'));
   }, []);
+
+  // 切换话题时自动生成该主题的面试题
+  useEffect(() => {
+    if (!selectedTopic || selectedTopic === lastTopicRef.current) return;
+    lastTopicRef.current = selectedTopic;
+    const initQuestion = TOPIC_INIT_QUESTIONS[selectedTopic];
+    if (initQuestion) {
+      setMessages([]);
+      // 短暂延迟让清空动画完成再触发
+      setTimeout(() => sendMessage(initQuestion), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopic]);
 
   const sendMessage = async (content?: string) => {
     const messageContent = content || input;
@@ -126,6 +148,7 @@ export default function PracticePage() {
   const clearChat = () => {
     setMessages([]);
     setSelectedTopic(null);
+    lastTopicRef.current = null;
   };
 
   return (
@@ -141,7 +164,16 @@ export default function PracticePage() {
           {topics.map((topic) => (
             <button
               key={topic.id}
-              onClick={() => setSelectedTopic(topic.id)}
+              onClick={() => {
+                if (selectedTopic === topic.id) {
+                  // 再次点击同一话题：重新生成
+                  lastTopicRef.current = null;
+                  setSelectedTopic(null);
+                  setTimeout(() => setSelectedTopic(topic.id), 50);
+                } else {
+                  setSelectedTopic(topic.id);
+                }
+              }}
               className={`w-full text-left p-4 rounded-xl transition-all ${
                 selectedTopic === topic.id
                   ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
@@ -153,7 +185,7 @@ export default function PracticePage() {
                 <div className="flex-1">
                   <div className="font-semibold">{topic.name}</div>
                   <div className={`text-xs ${selectedTopic === topic.id ? 'text-orange-100' : 'text-gray-500'}`}>
-                    {topic.count} 个问题
+                    {selectedTopic === topic.id ? '点击刷新题目' : `点击开始练习`}
                   </div>
                 </div>
                 <ChevronRight className={`w-5 h-5 ${selectedTopic === topic.id ? 'text-white' : 'text-gray-400'}`} />
@@ -192,10 +224,12 @@ export default function PracticePage() {
           <div className="flex items-center gap-3">
             <MessageSquare className="w-5 h-5 text-orange-500" />
             <div>
-              <h1 className="font-bold text-gray-900">
-                {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : '自由对话'}
-              </h1>
-              <p className="text-xs text-gray-500">AI 面试助手 · 记忆最近 6 轮对话</p>
+            <h1 className="font-bold text-gray-900">
+              {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : '自由对话'}
+            </h1>
+            <p className="text-xs text-gray-500">
+              {loading ? '正在生成面试题...' : 'AI 面试助手 · 可继续追问'}
+            </p>
             </div>
           </div>
           <div className="flex items-center gap-3">

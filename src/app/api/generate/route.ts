@@ -11,8 +11,7 @@ const providers = [
     name: 'dashscope',
     baseUrl: process.env.DASHSCOPE_BASE_URL || 'https://coding.dashscope.aliyuncs.com/v1',
     apiKey: process.env.DASHSCOPE_API_KEY,
-    // glm-5 比 qwen3.5-plus 更快，无 thinking 开销
-    model: process.env.DASHSCOPE_FAST_MODEL || 'glm-5',
+    model: process.env.DASHSCOPE_MODEL || 'qwen3.5-plus',
   },
   {
     name: 'ennew',
