@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Sparkles, Loader2, MessageSquare, Trash2, ChevronRight,
-  BookOpen, ThumbsUp, ThumbsDown, Lightbulb, FileText, Zap,
+  BookOpen, ThumbsUp, ThumbsDown, Lightbulb, FileText, Zap, History, X,
 } from "lucide-react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 
 interface HistoryMessage {
   role: 'user' | 'assistant';
@@ -29,6 +30,25 @@ interface Topic {
   count: number;
 }
 
+// 持久化存储的会话结构
+interface SavedSession {
+  id: string;
+  topicId: string | null;
+  topicName: string;
+  startedAt: number;
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string; // ISO string，便于 JSON 序列化
+    recommendedQuestions?: string[];
+    source?: 'cache' | 'llm' | 'rag';
+  }>;
+}
+
+const STORAGE_KEY = 'llm_interview_sessions';
+const MAX_SESSIONS = 20;
+
 const topics: Topic[] = [
   { id: 'transformer', name: 'Transformer 架构', icon: '🧠', count: 24 },
   { id: 'attention', name: 'Attention 机制', icon: '✨', count: 18 },
@@ -38,9 +58,50 @@ const topics: Topic[] = [
   { id: 'rlhf', name: 'RLHF', icon: '🎯', count: 12 },
 ];
 
-// 将 Message 转换为 API 历史格式（去掉 UI 特定字段）
+const TOPIC_INIT_QUESTIONS: Record<string, string> = {
+  transformer: '请给我出 3 道关于 Transformer 架构的面试题，覆盖不同难度，每道题给出详细答案。',
+  attention: '请给我出 3 道关于 Attention 机制的面试题，覆盖不同难度，每道题给出详细答案。',
+  'llm-basics': '请给我出 3 道大模型基础知识的面试题，覆盖不同难度，每道题给出详细答案。',
+  'fine-tuning': '请给我出 3 道关于大模型微调技术的面试题（LoRA、P-Tuning 等），每道题给出详细答案。',
+  prompt: '请给我出 3 道关于 Prompt Engineering 的面试题，覆盖不同难度，每道题给出详细答案。',
+  rlhf: '请给我出 3 道关于 RLHF 的面试题，覆盖不同难度，每道题给出详细答案。',
+};
+
 function toHistory(messages: Message[]): HistoryMessage[] {
   return messages.map(m => ({ role: m.role, content: m.content }));
+}
+
+// localStorage 工具函数
+function loadSessions(): SavedSession[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSession(session: SavedSession) {
+  try {
+    const sessions = loadSessions();
+    const idx = sessions.findIndex(s => s.id === session.id);
+    if (idx >= 0) {
+      sessions[idx] = session;
+    } else {
+      sessions.unshift(session);
+    }
+    // 只保留最近 MAX_SESSIONS 条
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)));
+  } catch {
+    // 忽略存储错误（隐身模式等）
+  }
+}
+
+function deleteSession(id: string) {
+  try {
+    const sessions = loadSessions().filter(s => s.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  } catch {}
 }
 
 export default function PracticePage() {
@@ -49,18 +110,54 @@ export default function PracticePage() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasResume, setHasResume] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastTopicRef = useRef<string | null>(null);
+  const currentSessionId = useRef<string>(Date.now().toString());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    // 检查是否已上传简历
     setHasResume(!!localStorage.getItem('resume_uploaded'));
+    setSavedSessions(loadSessions());
   }, []);
 
-  const sendMessage = async (content?: string) => {
+  // 每次消息更新时保存到 localStorage
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const topicObj = topics.find(t => t.id === selectedTopic);
+    const session: SavedSession = {
+      id: currentSessionId.current,
+      topicId: selectedTopic,
+      topicName: topicObj?.name || '自由对话',
+      startedAt: parseInt(currentSessionId.current),
+      messages: messages.map(m => ({
+        ...m,
+        timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
+      })),
+    };
+    saveSession(session);
+    setSavedSessions(loadSessions());
+  }, [messages, selectedTopic]);
+
+  // 切换话题时自动生成该主题的面试题
+  useEffect(() => {
+    if (!selectedTopic || selectedTopic === lastTopicRef.current) return;
+    lastTopicRef.current = selectedTopic;
+    const initQuestion = TOPIC_INIT_QUESTIONS[selectedTopic];
+    if (initQuestion) {
+      // 新话题 = 新 session
+      currentSessionId.current = Date.now().toString();
+      setMessages([]);
+      setTimeout(() => sendMessage(initQuestion), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopic]);
+
+  const sendMessage = useCallback(async (content?: string) => {
     const messageContent = content || input;
     if (!messageContent.trim() || loading) return;
 
@@ -77,7 +174,6 @@ export default function PracticePage() {
     setLoading(true);
 
     try {
-      // 传递完整历史（记忆机制）
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,12 +181,11 @@ export default function PracticePage() {
           topic: selectedTopic || 'general',
           difficulty: 'medium',
           question: messageContent,
-          history: toHistory(messages), // 传递历史消息
+          history: toHistory(messages),
         }),
       });
 
       if (!response.ok) throw new Error('生成失败');
-
       const data = await response.json();
 
       const assistantMessage: Message = {
@@ -114,7 +209,8 @@ export default function PracticePage() {
     } finally {
       setLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, loading, messages, selectedTopic]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -126,22 +222,45 @@ export default function PracticePage() {
   const clearChat = () => {
     setMessages([]);
     setSelectedTopic(null);
+    lastTopicRef.current = null;
+    currentSessionId.current = Date.now().toString();
+  };
+
+  // 从历史记录恢复会话
+  const restoreSession = (session: SavedSession) => {
+    const restored: Message[] = session.messages.map(m => ({
+      ...m,
+      timestamp: new Date(m.timestamp),
+    }));
+    setMessages(restored);
+    setSelectedTopic(session.topicId);
+    lastTopicRef.current = session.topicId;
+    currentSessionId.current = session.id;
+    setShowHistory(false);
   };
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="h-screen flex bg-gray-50 relative">
       {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-gray-200 flex flex-col">
+      <aside className="w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900 mb-1">学习主题</h2>
-          <p className="text-sm text-gray-500">选择一个主题开始对话</p>
+          <p className="text-sm text-gray-500">点击话题自动生成面试题</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {topics.map((topic) => (
             <button
               key={topic.id}
-              onClick={() => setSelectedTopic(topic.id)}
+              onClick={() => {
+                if (selectedTopic === topic.id) {
+                  lastTopicRef.current = null;
+                  setSelectedTopic(null);
+                  setTimeout(() => setSelectedTopic(topic.id), 50);
+                } else {
+                  setSelectedTopic(topic.id);
+                }
+              }}
               className={`w-full text-left p-4 rounded-xl transition-all ${
                 selectedTopic === topic.id
                   ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
@@ -153,7 +272,7 @@ export default function PracticePage() {
                 <div className="flex-1">
                   <div className="font-semibold">{topic.name}</div>
                   <div className={`text-xs ${selectedTopic === topic.id ? 'text-orange-100' : 'text-gray-500'}`}>
-                    {topic.count} 个问题
+                    {selectedTopic === topic.id ? '点击刷新题目' : '点击开始练习'}
                   </div>
                 </div>
                 <ChevronRight className={`w-5 h-5 ${selectedTopic === topic.id ? 'text-white' : 'text-gray-400'}`} />
@@ -163,7 +282,20 @@ export default function PracticePage() {
         </div>
 
         <div className="p-4 border-t border-gray-200 space-y-2">
-          {/* 简历入口 */}
+          {/* 历史记录入口 */}
+          <button
+            onClick={() => { setSavedSessions(loadSessions()); setShowHistory(true); }}
+            className="w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-all text-sm font-medium bg-gray-50 hover:bg-gray-100 text-gray-700"
+          >
+            <History className="w-4 h-4 text-gray-500" />
+            历史对话
+            {savedSessions.length > 0 && (
+              <span className="ml-auto text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">
+                {savedSessions.length}
+              </span>
+            )}
+          </button>
+
           <Link
             href="/resume"
             className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-all text-sm font-medium ${
@@ -175,6 +307,7 @@ export default function PracticePage() {
             <FileText className="w-4 h-4" />
             {hasResume ? '✓ 简历已上传' : '上传简历（RAG）'}
           </Link>
+
           <button
             onClick={clearChat}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all text-sm"
@@ -195,7 +328,9 @@ export default function PracticePage() {
               <h1 className="font-bold text-gray-900">
                 {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : '自由对话'}
               </h1>
-              <p className="text-xs text-gray-500">AI 面试助手 · 记忆最近 6 轮对话</p>
+              <p className="text-xs text-gray-500">
+                {loading ? '正在生成面试题...' : 'AI 面试助手 · 可继续追问'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -204,7 +339,7 @@ export default function PracticePage() {
             )}
             {hasResume && (
               <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1">
-                <FileText className="w-3 h-3" /> 简历 RAG 已启用
+                <FileText className="w-3 h-3" /> 简历 RAG
               </span>
             )}
           </div>
@@ -255,7 +390,7 @@ export default function PracticePage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="输入你的问题，例如：'请解释 Transformer 的 Self-Attention 机制'..."
+                placeholder="继续追问，或输入新问题..."
                 className="flex-1 bg-transparent border-none outline-none resize-none px-4 py-3 text-gray-900 placeholder-gray-400 max-h-32 min-h-[56px]"
                 rows={1}
               />
@@ -269,11 +404,116 @@ export default function PracticePage() {
               </button>
             </div>
             <p className="text-xs text-gray-400 text-center mt-2">
-              Enter 发送 · Shift+Enter 换行 · 自动记忆对话上下文
+              Enter 发送 · Shift+Enter 换行 · 对话自动保存
             </p>
           </div>
         </div>
       </main>
+
+      {/* 历史记录抽屉 */}
+      <AnimatePresence>
+        {showHistory && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/30 z-20"
+              onClick={() => setShowHistory(false)}
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 h-full w-96 bg-white shadow-2xl z-30 flex flex-col"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <div>
+                  <h2 className="font-bold text-gray-900 text-lg">历史对话</h2>
+                  <p className="text-sm text-gray-500">{savedSessions.length} 条记录，保存在本地</p>
+                </div>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {savedSessions.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">暂无历史记录</p>
+                    <p className="text-xs mt-1">对话完成后自动保存</p>
+                  </div>
+                ) : (
+                  savedSessions.map((session) => {
+                    const topicObj = topics.find(t => t.id === session.topicId);
+                    const firstAI = session.messages.find(m => m.role === 'assistant');
+                    const preview = firstAI?.content.slice(0, 80) || '暂无内容';
+                    const date = new Date(session.startedAt);
+                    const isToday = new Date().toDateString() === date.toDateString();
+                    const dateStr = isToday
+                      ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                      : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                    return (
+                      <motion.div
+                        key={session.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="group bg-gray-50 hover:bg-orange-50 border border-gray-200 hover:border-orange-200 rounded-2xl p-4 cursor-pointer transition-all"
+                        onClick={() => restoreSession(session)}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{topicObj?.icon || '💬'}</span>
+                            <span className="font-semibold text-gray-900 text-sm">{session.topicName}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-400 whitespace-nowrap">{dateStr}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSession(session.id);
+                                setSavedSessions(loadSessions());
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 text-gray-400 transition-all rounded"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{preview}...</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs text-gray-400">{session.messages.length} 条消息</span>
+                          <span className="text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">点击恢复 →</span>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
+              </div>
+
+              {savedSessions.length > 0 && (
+                <div className="p-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(STORAGE_KEY);
+                      setSavedSessions([]);
+                    }}
+                    className="w-full text-sm text-gray-500 hover:text-red-500 transition-colors py-2"
+                  >
+                    清空所有历史记录
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -313,14 +553,18 @@ function MessageBubble({
             ? 'bg-blue-500 text-white rounded-tr-sm'
             : 'bg-white text-gray-900 rounded-tl-sm border border-gray-200'
         }`}>
-          <p className="whitespace-pre-wrap leading-relaxed text-sm">{message.content}</p>
+          {isUser ? (
+            <p className="whitespace-pre-wrap leading-relaxed text-sm">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none prose-headings:font-bold prose-strong:font-bold prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
 
-        {/* 助手消息底部工具栏 */}
         {!isUser && (
           <div className="mt-2 space-y-3">
             <div className="flex items-center gap-3">
-              {/* 来源标签 */}
               {message.source && (
                 <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
                   message.source === 'cache'
@@ -352,7 +596,6 @@ function MessageBubble({
               </button>
             </div>
 
-            {/* 推荐问题 */}
             {message.recommendedQuestions && message.recommendedQuestions.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
@@ -405,11 +648,9 @@ function EmptyState({ onSelectTopic }: { onSelectTopic: (topic: string) => void 
           <Sparkles className="w-10 h-10 text-white" />
         </motion.div>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">
-          开始你的面试练习
-        </h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">开始你的面试练习</h2>
         <p className="text-gray-500 mb-8 text-sm">
-          选择一个主题或直接提问，AI 会为你详细解答并推荐相关问题
+          点击左侧话题自动生成面试题，或直接输入问题
         </p>
 
         <div className="grid sm:grid-cols-2 gap-3">

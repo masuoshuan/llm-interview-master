@@ -11,8 +11,7 @@ const providers = [
     name: 'dashscope',
     baseUrl: process.env.DASHSCOPE_BASE_URL || 'https://coding.dashscope.aliyuncs.com/v1',
     apiKey: process.env.DASHSCOPE_API_KEY,
-    // glm-5 比 qwen3.5-plus 更快，无 thinking 开销
-    model: process.env.DASHSCOPE_FAST_MODEL || 'glm-5',
+    model: process.env.DASHSCOPE_MODEL || 'qwen3.5-plus',
   },
   {
     name: 'ennew',
@@ -95,8 +94,8 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 5. 调用 LLM
-    const response = await fetch(`${provider.baseUrl}/messages`, {
+    // 5. 调用 LLM（OpenAI chat/completions 格式）
+    const response = await fetch(`${provider.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,8 +103,10 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: provider.model,
-        system: systemPrompt,
-        messages,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages,
+        ],
         max_tokens: 1500,
         temperature: 0.5,
       }),
@@ -118,9 +119,9 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || data.content?.[0]?.text || '';
+    const content = data.choices?.[0]?.message?.content || '';
 
-    // 6. 解析响应（提取 JSON 中的 recommendedQuestions）
+    // 6. 解析响应，提取 recommendedQuestions，并从 answer 中剥离 JSON 块
     let questionData: {
       question: string;
       answer: string;
@@ -130,30 +131,48 @@ export async function POST(request: Request) {
     };
 
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        questionData = JSON.parse(jsonMatch[0]);
-      } else {
-        // 尝试从文本中提取推荐问题
-        const recMatch = content.match(/推荐问题[：:]\s*([\s\S]*?)(?:\n\n|$)/);
-        const recommendations = recMatch
-          ? recMatch[1].split('\n').filter(Boolean).map((s: string) => s.replace(/^[\d\.\-\*]+\s*/, '')).slice(0, 3)
-          : [];
-
-        questionData = {
-          question: question || `关于「${topic}」的面试题`,
-          answer: content,
-          difficulty,
-          topic,
-          recommendedQuestions: recommendations,
-        };
-      }
-    } catch {
+      // 先尝试整体解析为 JSON（模型有时会整段返回 JSON）
+      const fullJson = JSON.parse(content);
       questionData = {
-        question: question || `关于「${topic}」的面试题`,
-        answer: content,
+        question: fullJson.question || question || `关于「${topic}」的面试题`,
+        answer: fullJson.answer || content,
         difficulty,
         topic,
+        recommendedQuestions: fullJson.recommendedQuestions || [],
+      };
+    } catch {
+      // 从正文中提取内嵌的 JSON 块（```json {...} ``` 或裸 {...}）
+      let cleanAnswer = content;
+      let recommendations: string[] = [];
+
+      // 提取 ```json ... ``` 代码块
+      const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        try {
+          const parsed = JSON.parse(codeBlockMatch[1]);
+          recommendations = parsed.recommendedQuestions || [];
+          cleanAnswer = content.replace(codeBlockMatch[0], '').trim();
+        } catch { /* ignore */ }
+      }
+
+      // 若没有代码块，尝试裸 JSON 对象
+      if (recommendations.length === 0) {
+        const bareJsonMatch = content.match(/\{[^{}]*"recommendedQuestions"[^{}]*\}/);
+        if (bareJsonMatch) {
+          try {
+            const parsed = JSON.parse(bareJsonMatch[0]);
+            recommendations = parsed.recommendedQuestions || [];
+            cleanAnswer = content.replace(bareJsonMatch[0], '').trim();
+          } catch { /* ignore */ }
+        }
+      }
+
+      questionData = {
+        question: question || `关于「${topic}」的面试题`,
+        answer: cleanAnswer,
+        difficulty,
+        topic,
+        recommendedQuestions: recommendations,
       };
     }
 
