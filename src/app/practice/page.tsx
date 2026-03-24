@@ -7,6 +7,7 @@ import {
   BookOpen, ThumbsUp, ThumbsDown, Lightbulb, FileText, Zap, History, X,
 } from "lucide-react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 
 interface HistoryMessage {
   role: 'user' | 'assistant';
@@ -552,7 +553,13 @@ function MessageBubble({
             ? 'bg-blue-500 text-white rounded-tr-sm'
             : 'bg-white text-gray-900 rounded-tl-sm border border-gray-200'
         }`}>
-          <p className="whitespace-pre-wrap leading-relaxed text-sm">{message.content}</p>
+          {isUser ? (
+            <p className="whitespace-pre-wrap leading-relaxed text-sm">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none prose-headings:font-bold prose-strong:font-bold prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {!isUser && (
