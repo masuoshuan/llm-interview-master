@@ -94,8 +94,8 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 5. 调用 LLM
-    const response = await fetch(`${provider.baseUrl}/messages`, {
+    // 5. 调用 LLM（OpenAI chat/completions 格式）
+    const response = await fetch(`${provider.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,8 +103,10 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: provider.model,
-        system: systemPrompt,
-        messages,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages,
+        ],
         max_tokens: 1500,
         temperature: 0.5,
       }),
@@ -117,7 +119,7 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || data.content?.[0]?.text || '';
+    const content = data.choices?.[0]?.message?.content || '';
 
     // 6. 解析响应（提取 JSON 中的 recommendedQuestions）
     let questionData: {
